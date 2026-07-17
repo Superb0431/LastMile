@@ -1,0 +1,14 @@
+{
+  "trusted_domains": [
+    "who.int",
+    "nice.org.uk",
+    "drugs.com",
+    "uptodate.com",
+    "pubmed.ncbi.nlm.nih.gov",
+    "nhc.gov.cn",
+    "yiigle.com",
+    "cnki.net",
+    "medlive.cn",
+    "dxy.cn"
+  ]
+}

@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>医疗随访 Agent</title>
+  <style>
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+      background: #ededed;
+      color: #1f1f1f;
+    }
+    
+    .hidden { display: none !important; }
+
+    
+    #login-screen {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      background: linear-gradient(135deg, #07c160 0%, #10b97a 100%);
+    }
+    #login-card {
+      background: #fff;
+      padding: 40px 48px;
+      border-radius: 16px;
+      box-shadow: 0 10px 40px rgba(0,0,0,.15);
+      text-align: center;
+      width: 360px;
+    }
+    #login-card h1 { font-size: 22px; margin-bottom: 8px; }
+    #login-card p { color: #888; font-size: 13px; margin-bottom: 22px; }
+    #login-card input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 15px;
+      outline: none;
+    }
+    #login-card input:focus { border-color: #07c160; }
+    #login-card button {
+      width: 100%;
+      margin-top: 16px;
+      padding: 12px;
+      background: #07c160;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    #login-card button:hover { background: #06a552; }
+
+    
+    #chat-screen { height: 100%; display: flex; }
+
+    
+    #sidebar {
+      width: 240px;
+      background: #2e2e2e;
+      color: #ddd;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    #sidebar-header {
+      padding: 16px;
+      border-bottom: 1px solid #444;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #sidebar-header .me { font-size: 14px; font-weight: bold; }
+    #new-chat-btn {
+      background: #07c160;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    #chat-list { flex: 1; overflow-y: auto; }
+    .chat-item {
+      padding: 12px 16px;
+      font-size: 13px;
+      cursor: pointer;
+      border-bottom: 1px solid #3a3a3a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .chat-item:hover { background: #3a3a3a; }
+    .chat-item.active { background: #07c160; color: #fff; }
+
+    
+    #chat-main { flex: 1; display: flex; flex-direction: column; }
+    #chat-title {
+      padding: 14px 20px;
+      background: #f5f5f5;
+      border-bottom: 1px solid #e0e0e0;
+      font-size: 15px;
+      font-weight: bold;
+    }
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    
+    .msg-row { display: flex; }
+    .msg-row.user { justify-content: flex-end; }      
+    .msg-row.agent { justify-content: flex-start; }    
+
+    
+    .bubble {
+      max-width: 70%;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;       
+      word-break: break-word;
+    }
+    .msg-row.user .bubble { background: #95ec69; }       
+    .msg-row.agent .bubble { background: #fff; }
+
+    
+    .tool-card {
+      background: #fff8e1;
+      border: 1px solid #ffe082;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 12px;
+      color: #8a6d3b;
+      max-width: 70%;
+      align-self: flex-start;
+    }
+    .tool-card .tool-title { font-weight: bold; margin-bottom: 4px; }
+    .tool-card pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: Consolas, monospace;
+      margin-top: 4px;
+    }
+
+    
+    .approval-box {
+      background: #fff;
+      border: 1px solid #07c160;
+      border-radius: 8px;
+      padding: 12px;
+      max-width: 70%;
+      align-self: flex-start;
+      font-size: 13px;
+    }
+    .approval-box .ask { margin-bottom: 8px; }
+    .approval-box button {
+      border: none;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      margin-right: 8px;
+    }
+    .approval-box .approve { background: #07c160; color: #fff; }
+    .approval-box .reject { background: #e0e0e0; color: #333; }
+
+    
+    #input-area {
+      border-top: 1px solid #e0e0e0;
+      background: #f5f5f5;
+      padding: 12px 16px;
+      display: flex;
+      gap: 10px;
+    }
+    #input-box {
+      flex: 1;
+      resize: none;
+      height: 48px;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      font-family: inherit;
+    }
+    #input-box:focus { border-color: #07c160; }
+    #send-btn {
+      width: 90px;
+      background: #07c160;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    #send-btn:disabled { background: #b5d9c2; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+  
+  <div id="login-screen">
+    <div id="login-card">
+      <h1>医疗随访 Agent</h1>
+      <p>请输入你的用户名进入聊天</p>
+      <input id="username-input" type="text" placeholder="例如：张三" autofocus />
+      <button id="enter-btn">进入</button>
+    </div>
+  </div>
+
+  
+  <div id="chat-screen" class="hidden">
+    
+    <div id="sidebar">
+      <div id="sidebar-header">
+        <span class="me" id="me-name"></span>
+        <button id="new-chat-btn">+ 新对话</button>
+      </div>
+      <div id="chat-list"></div>
+    </div>
+
+    
+    <div id="chat-main">
+      <div id="chat-title">新对话</div>
+      <div id="messages"></div>
+      <div id="input-area">
+        <textarea id="input-box" placeholder="输入消息，按回车发送（Shift+回车换行）"></textarea>
+        <button id="send-btn">发送</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+
+  const API_BASE = (location.protocol === "file:") ? "http://127.0.0.1:8000" : "";
+
+  let username = "";
+  let currentChatId = null;
+  let isBusy = false;
+
+  const el = (id) => document.getElementById(id);
+
+  el("enter-btn").addEventListener("click", doLogin);
+  el("username-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") doLogin();
+  });
+
+  function doLogin() {
+    const name = el("username-input").value.trim();
+    if (!name) { alert("请输入用户名"); return; }
+    username = name;
+    el("me-name").textContent = username;
+    el("login-screen").classList.add("hidden");
+    el("chat-screen").classList.remove("hidden");
+    loadChatList();
+    startNewChat();
+  }
+
+  async function loadChatList() {
+    try {
+      const resp = await fetch(`${API_BASE}/api/chats?username=${encodeURIComponent(username)}`);
+      const data = await resp.json();
+      renderChatList(data.chats || []);
+    } catch (err) {
+      console.error("加载会话列表失败", err);
+    }
+  }
+
+  function renderChatList(chats) {
+    const listEl = el("chat-list");
+    listEl.innerHTML = "";
+    chats.forEach((chat) => {
+      const item = document.createElement("div");
+      item.className = "chat-item" + (chat.chat_id === currentChatId ? " active" : "");
+      item.textContent = chat.title;
+      item.addEventListener("click", () => {
+        if (isBusy) return;
+        openChat(chat.chat_id);
+      });
+      listEl.appendChild(item);
+    });
+  }
+
+  function startNewChat() {
+    currentChatId = null;
+    el("chat-title").textContent = "新对话";
+    el("messages").innerHTML = "";
+    highlightActiveChat();
+  }
+  el("new-chat-btn").addEventListener("click", () => {
+    if (isBusy) return;
+    startNewChat();
+  });
+
+  async function openChat(chatId) {
+    currentChatId = chatId;
+    el("chat-title").textContent = chatId;
+    el("messages").innerHTML = "";
+    highlightActiveChat();
+    try {
+      const resp = await fetch(`${API_BASE}/api/chats/${encodeURIComponent(chatId)}/messages?username=${encodeURIComponent(username)}`);
+      const data = await resp.json();
+      (data.messages || []).forEach(renderHistoryMessage);
+      scrollToBottom();
+    } catch (err) {
+      console.error("加载历史消息失败", err);
+    }
+  }
+
+  function highlightActiveChat() {
+    document.querySelectorAll(".chat-item").forEach((item) => {
+      item.classList.toggle("active", item.textContent === currentChatId);
+    });
+  }
+
+  function renderHistoryMessage(msg) {
+    if (msg.role === "user") {
+      addBubble("user", msg.content || "");
+    } else if (msg.role === "assistant" && msg.tool_calls) {
+      let calls = msg.tool_calls;
+      if (typeof calls === "string") {
+        try { calls = JSON.parse(calls); } catch (e) { calls = []; }
+      }
+      (calls || []).forEach((tc) => {
+        const fn = tc.function || {};
+        addToolCard(`调用了工具：${fn.name || ""}`, fn.arguments);
+      });
+      if (msg.content) addBubble("agent", msg.content);
+    } else if (msg.role === "assistant") {
+      addBubble("agent", msg.content || "");
+    } else if (msg.role === "tool") {
+      addToolCard("工具返回结果", msg.content);
+    }
+  }
+
+  el("send-btn").addEventListener("click", sendMessage);
+  el("input-box").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  async function sendMessage() {
+    if (isBusy) return;
+    const text = el("input-box").value.trim();
+    if (!text) return;
+
+    setBusy(true);
+    el("input-box").value = "";
+
+    addBubble("user", text);
+    scrollToBottom();
+
+    const agentBubble = addBubble("agent", "");
+
+    try {
+      const resp = await fetch(`${API_BASE}/api/chat/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: username,
+          chat_id: currentChatId,
+          message: text,
+        }),
+      });
+      if (!resp.ok) throw new Error(`提交失败 HTTP ${resp.status}`);
+      const { task_id, chat_id } = await resp.json();
+      if (chat_id) {
+        currentChatId = chat_id;
+        el("chat-title").textContent = chat_id;
+      }
+      await pollTaskResult(task_id, agentBubble);
+    } catch (err) {
+      console.error("发送失败", err);
+      agentBubble.textContent += `\n（出错了：${err}）`;
+      setBusy(false);
+    }
+  }
+
+  async function pollTaskResult(taskId, agentBubble) {
+    let cursor = 0;
+    let finished = false;
+
+    while (!finished) {
+      try {
+        const resp = await fetch(
+          `${API_BASE}/api/chat/result/${encodeURIComponent(taskId)}?cursor=${cursor}`
+        );
+        if (!resp.ok) throw new Error(`轮询失败 HTTP ${resp.status}`);
+        const body = await resp.json();
+        cursor = body.cursor ?? cursor;
+
+        for (const evt of body.events || []) {
+          let data = {};
+          try { data = JSON.parse(evt.data || "{}"); } catch (e) { data = {}; }
+          handleEvent(evt.event, data, agentBubble);
+          if (evt.event === "done" || evt.event === "error") {
+            finished = true;
+          }
+        }
+
+        if (body.status === "done" || body.status === "error" || body.status === "not_found") {
+          finished = true;
+        }
+      } catch (err) {
+        console.error("轮询失败", err);
+        agentBubble.textContent += `\n（轮询出错：${err}）`;
+        finished = true;
+      }
+
+      if (!finished) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
+
+    if (isBusy) setBusy(false);
+  }
+
+  function handleEvent(eventName, data, agentBubble) {
+    if (eventName === "chat_info") {
+      currentChatId = data.chat_id;
+      el("chat-title").textContent = currentChatId;
+    } else if (eventName === "token") {
+      agentBubble.textContent += data.text || "";
+      scrollToBottom();
+    } else if (eventName === "tool_call") {
+      addToolCard(`正在调用工具：${data.name}`, data.args);
+      scrollToBottom();
+    } else if (eventName === "approval_request") {
+      addApprovalBox(data.name, data.args, data.toolcall_id);
+      scrollToBottom();
+    } else if (eventName === "tool_result") {
+      addToolCard(`工具「${data.name}」返回结果`, data.result);
+      scrollToBottom();
+    } else if (eventName === "error") {
+      agentBubble.textContent += `\n（${data.message || "出错了"}）`;
+    } else if (eventName === "done") {
+      setBusy(false);
+      loadChatList();
+    }
+  }
+
+  function addApprovalBox(toolName, args, toolcallId) {
+    const box = document.createElement("div");
+    box.className = "approval-box";
+
+    const ask = document.createElement("div");
+    ask.className = "ask";
+    ask.textContent = `AI 想调用工具「${toolName}」，参数：${JSON.stringify(args)}。是否允许？`;
+    box.appendChild(ask);
+
+    const approveBtn = document.createElement("button");
+    approveBtn.className = "approve";
+    approveBtn.textContent = "同意";
+    const rejectBtn = document.createElement("button");
+    rejectBtn.className = "reject";
+    rejectBtn.textContent = "拒绝";
+
+    const decide = async (approved) => {
+      approveBtn.disabled = true;
+      rejectBtn.disabled = true;
+      ask.textContent += approved ? "  → 你选择了：同意" : "  → 你选择了：拒绝";
+      try {
+        await fetch(`${API_BASE}/api/approve`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: currentChatId,
+            toolcall_id: toolcallId,
+            approved: approved,
+          }),
+        });
+      } catch (err) {
+        console.error("提交审批失败", err);
+      }
+    };
+    approveBtn.addEventListener("click", () => decide(true));
+    rejectBtn.addEventListener("click", () => decide(false));
+
+    box.appendChild(approveBtn);
+    box.appendChild(rejectBtn);
+    el("messages").appendChild(box);
+  }
+
+  function addBubble(who, text) {
+    const row = document.createElement("div");
+    row.className = "msg-row " + (who === "user" ? "user" : "agent");
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.textContent = text;
+    row.appendChild(bubble);
+    el("messages").appendChild(row);
+    return bubble;
+  }
+
+  function addToolCard(title, content) {
+    const card = document.createElement("div");
+    card.className = "tool-card";
+    const titleEl = document.createElement("div");
+    titleEl.className = "tool-title";
+    titleEl.textContent = title;
+    card.appendChild(titleEl);
+    if (content !== undefined && content !== null && content !== "") {
+      const pre = document.createElement("pre");
+      pre.textContent = (typeof content === "object")
+        ? JSON.stringify(content, null, 2)
+        : String(content);
+      card.appendChild(pre);
+    }
+    el("messages").appendChild(card);
+  }
+
+  function scrollToBottom() {
+    const m = el("messages");
+    m.scrollTop = m.scrollHeight;
+  }
+
+  function setBusy(busy) {
+    isBusy = busy;
+    el("send-btn").disabled = busy;
+    el("send-btn").textContent = busy ? "回复中…" : "发送";
+  }
+  </script>
+</body>
+</html>

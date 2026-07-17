@@ -1,0 +1,25 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+~$*
+
+# Runtime user data & logs
+backend/users/*
+!backend/users/.gitkeep
+backend/data/lastmile.db
+backend/data/safety_log.jsonl
+**/messages.db
+
+# Build artifacts
+*.tar

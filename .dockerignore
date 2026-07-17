@@ -1,0 +1,12 @@
+.git
+.idea
+.vscode
+.venv
+venv
+__pycache__
+*.pyc
+.env
+backend/users/*
+!backend/users/.gitkeep
+backend/data/lastmile.db
+backend/data/safety_log.jsonl
