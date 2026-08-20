@@ -1,10 +1,11 @@
-"""build_drug_interactions."""
+"""构建药物相互作用数据。"""
 
 import sqlite3
 from pathlib import Path
 
 SRC = Path(__file__).with_name("drug_safety.db")
 DST = Path(__file__).with_name("drug_interactions.db")
+
 
 def build() -> int:
     if not SRC.exists():
@@ -59,6 +60,7 @@ def build() -> int:
         dst.close()
 
     return count
+
 
 if __name__ == "__main__":
     n = build()

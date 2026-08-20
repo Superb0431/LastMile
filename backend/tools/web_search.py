@@ -1,10 +1,11 @@
-"""web_search."""
+"""联网搜索工具。"""
 
 import json
 
 from tavily import TavilyClient
 
 from backend.config import SEARCH_SAFE_MODE, SEARCH_WHITELIST_PATH, TAVILY_API_KEY
+
 
 def _load_trusted_domains() -> list[str]:
     if not SEARCH_WHITELIST_PATH.exists():
@@ -15,6 +16,7 @@ def _load_trusted_domains() -> list[str]:
         return []
     domains = data.get("trusted_domains", [])
     return [str(d).strip() for d in domains if str(d).strip()]
+
 
 def run_web_search(query: str, max_results: int = 1, safe: bool | None = None) -> str:
     if not TAVILY_API_KEY:

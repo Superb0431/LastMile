@@ -1,15 +1,17 @@
-"""read_record."""
+"""读取用户画像或病历记录。"""
 
 from pathlib import Path
 
 from backend.config import USERS_DIR
 from backend.memory import db
 
+
 def _read_profile_file(username: str) -> str:
     path = USERS_DIR / username / "profile.md"
     if not path.exists():
         return "（暂无用户画像记录。）"
     return path.read_text(encoding="utf-8").strip() or "（暂无用户画像记录。）"
+
 
 def run_read_record(username: str, target: str = "all", recent_n: int | None = None) -> str:
     target = (target or "all").strip().lower()

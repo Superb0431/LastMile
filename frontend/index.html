@@ -1,12 +1,26 @@
 <!DOCTYPE html>
+<!--
+  index.html —— 医疗随访 Agent 的聊天网页（前端，单文件）
 
+  这一个文件里同时包含了：页面结构(HTML) + 样式(CSS) + 逻辑(JavaScript)。
+  之所以放一个文件，是为了“双击即开、零构建”，最适合做 demo。
+
+  整体分两个界面：
+    1) 登录界面：输入用户名，点“进入”。
+    2) 聊天界面：左侧是历史会话列表（侧边栏），右侧是微信式聊天框。
+
+  和后端的交互：
+    - 发消息走 POST /api/chat/submit，立刻拿到 task_id，再轮询 GET /api/chat/result/{task_id}。
+    - 工具需要审批时，弹出“同意/拒绝”按钮，点了之后调 POST /api/approve。
+    - 在一轮回复彻底结束(done)之前，发送按钮被锁住，点了也没反应（PRD 要求）。
+-->
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>医疗随访 Agent</title>
   <style>
-    
+    /* ---------- 全局基础样式 ---------- */
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
     body {
@@ -14,10 +28,10 @@
       background: #ededed;
       color: #1f1f1f;
     }
-    
+    /* 隐藏元素的小工具类 */
     .hidden { display: none !important; }
 
-    
+    /* ---------- 登录界面 ---------- */
     #login-screen {
       height: 100%;
       display: flex;
@@ -59,10 +73,10 @@
     }
     #login-card button:hover { background: #06a552; }
 
-    
+    /* ---------- 聊天界面整体布局：左侧边栏 + 右聊天区 ---------- */
     #chat-screen { height: 100%; display: flex; }
 
-    
+    /* 左侧侧边栏 */
     #sidebar {
       width: 240px;
       background: #2e2e2e;
@@ -101,7 +115,7 @@
     .chat-item:hover { background: #3a3a3a; }
     .chat-item.active { background: #07c160; color: #fff; }
 
-    
+    /* 右侧聊天区 */
     #chat-main { flex: 1; display: flex; flex-direction: column; }
     #chat-title {
       padding: 14px 20px;
@@ -119,25 +133,25 @@
       gap: 14px;
     }
 
-    
+    /* 单条消息：一行，靠左或靠右 */
     .msg-row { display: flex; }
-    .msg-row.user { justify-content: flex-end; }      
-    .msg-row.agent { justify-content: flex-start; }    
+    .msg-row.user { justify-content: flex-end; }      /* 用户消息靠右 */
+    .msg-row.agent { justify-content: flex-start; }    /* AI 消息靠左 */
 
-    
+    /* 气泡 */
     .bubble {
       max-width: 70%;
       padding: 10px 14px;
       border-radius: 10px;
       font-size: 14px;
       line-height: 1.6;
-      white-space: pre-wrap;       
+      white-space: pre-wrap;       /* 保留换行 */
       word-break: break-word;
     }
-    .msg-row.user .bubble { background: #95ec69; }       
+    .msg-row.user .bubble { background: #95ec69; }       /* 微信绿 */
     .msg-row.agent .bubble { background: #fff; }
 
-    
+    /* 工具调用 / 工具结果的小卡片（显示在 AI 气泡区域里） */
     .tool-card {
       background: #fff8e1;
       border: 1px solid #ffe082;
@@ -156,7 +170,7 @@
       margin-top: 4px;
     }
 
-    
+    /* 审批按钮区 */
     .approval-box {
       background: #fff;
       border: 1px solid #07c160;
@@ -178,7 +192,7 @@
     .approval-box .approve { background: #07c160; color: #fff; }
     .approval-box .reject { background: #e0e0e0; color: #333; }
 
-    
+    /* 底部输入区 */
     #input-area {
       border-top: 1px solid #e0e0e0;
       background: #f5f5f5;
@@ -212,7 +226,7 @@
 </head>
 <body>
 
-  
+  <!-- ============ 界面一：登录 ============ -->
   <div id="login-screen">
     <div id="login-card">
       <h1>医疗随访 Agent</h1>
@@ -222,9 +236,9 @@
     </div>
   </div>
 
-  
+  <!-- ============ 界面二：聊天（默认隐藏，登录后显示） ============ -->
   <div id="chat-screen" class="hidden">
-    
+    <!-- 左侧：侧边栏 -->
     <div id="sidebar">
       <div id="sidebar-header">
         <span class="me" id="me-name"></span>
@@ -233,7 +247,7 @@
       <div id="chat-list"></div>
     </div>
 
-    
+    <!-- 右侧：聊天区 -->
     <div id="chat-main">
       <div id="chat-title">新对话</div>
       <div id="messages"></div>
@@ -245,15 +259,24 @@
   </div>
 
   <script>
+  // ============================================================
+  // 全局状态
+  // ============================================================
 
+  // 后端地址：如果是用浏览器直接打开本文件(file://)，就连本地 8000 端口；
+  // 如果是通过后端访问的(http://127.0.0.1:8000/)，就用同源（空字符串）。
   const API_BASE = (location.protocol === "file:") ? "http://127.0.0.1:8000" : "";
 
-  let username = "";
-  let currentChatId = null;
-  let isBusy = false;
+  let username = "";        // 当前用户名
+  let currentChatId = null; // 当前会话 ID（新会话时为 null，后端会生成并通过 chat_info 告知）
+  let isBusy = false;       // 是否正在等待 AI 回复。为 true 时禁止再发消息（PRD 要求）。
 
+  // 常用的页面元素，先抓出来存着，省得每次都查。
   const el = (id) => document.getElementById(id);
 
+  // ============================================================
+  // 登录
+  // ============================================================
   el("enter-btn").addEventListener("click", doLogin);
   el("username-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter") doLogin();
@@ -264,12 +287,18 @@
     if (!name) { alert("请输入用户名"); return; }
     username = name;
     el("me-name").textContent = username;
+    // 切换界面：藏登录、显聊天。
     el("login-screen").classList.add("hidden");
     el("chat-screen").classList.remove("hidden");
+    // 加载这个用户的历史会话列表。
     loadChatList();
+    // 默认开一个新对话。
     startNewChat();
   }
 
+  // ============================================================
+  // 侧边栏：会话列表
+  // ============================================================
   async function loadChatList() {
     try {
       const resp = await fetch(`${API_BASE}/api/chats?username=${encodeURIComponent(username)}`);
@@ -287,14 +316,16 @@
       const item = document.createElement("div");
       item.className = "chat-item" + (chat.chat_id === currentChatId ? " active" : "");
       item.textContent = chat.title;
+      // 点击某个历史会话：加载它的消息。
       item.addEventListener("click", () => {
-        if (isBusy) return;
+        if (isBusy) return; // 正在回复时不许切换，避免乱套
         openChat(chat.chat_id);
       });
       listEl.appendChild(item);
     });
   }
 
+  // 开一个新对话：清空当前会话状态和消息区。
   function startNewChat() {
     currentChatId = null;
     el("chat-title").textContent = "新对话";
@@ -306,6 +337,7 @@
     startNewChat();
   });
 
+  // 打开某个已存在的会话：拉它的历史消息并渲染出来。
   async function openChat(chatId) {
     currentChatId = chatId;
     el("chat-title").textContent = chatId;
@@ -321,16 +353,19 @@
     }
   }
 
+  // 把侧边栏里“当前会话”那一项高亮。
   function highlightActiveChat() {
     document.querySelectorAll(".chat-item").forEach((item) => {
       item.classList.toggle("active", item.textContent === currentChatId);
     });
   }
 
+  // 渲染一条“历史消息”（从数据库读出来的）。
   function renderHistoryMessage(msg) {
     if (msg.role === "user") {
       addBubble("user", msg.content || "");
     } else if (msg.role === "assistant" && msg.tool_calls) {
+      // 历史里的工具调用：一条 assistant 可能带多个并行调用，逐个显示成工具卡片。
       let calls = msg.tool_calls;
       if (typeof calls === "string") {
         try { calls = JSON.parse(calls); } catch (e) { calls = []; }
@@ -343,12 +378,17 @@
     } else if (msg.role === "assistant") {
       addBubble("agent", msg.content || "");
     } else if (msg.role === "tool") {
+      // 工具结果默认也显示一下（可按需隐藏）。
       addToolCard("工具返回结果", msg.content);
     }
   }
 
+  // ============================================================
+  // 发送消息 + 接收 SSE 流
+  // ============================================================
   el("send-btn").addEventListener("click", sendMessage);
   el("input-box").addEventListener("keydown", (e) => {
+    // 回车发送；Shift+回车换行。
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
@@ -356,16 +396,20 @@
   });
 
   async function sendMessage() {
+    // PRD 要求：正在回复中（isBusy）时，点发送不执行任何操作。
     if (isBusy) return;
     const text = el("input-box").value.trim();
     if (!text) return;
 
+    // 上锁：禁止再发，直到收到 done。
     setBusy(true);
     el("input-box").value = "";
 
+    // 先把用户气泡显示出来。
     addBubble("user", text);
     scrollToBottom();
 
+    // 准备一个空的 AI 气泡，等会儿把流式 token 一点点填进去。
     const agentBubble = addBubble("agent", "");
 
     try {
@@ -392,6 +436,7 @@
     }
   }
 
+  // 轮询任务结果：增量拉取事件，复用 handleEvent 渲染。
   async function pollTaskResult(taskId, agentBubble) {
     let cursor = 0;
     let finished = false;
@@ -431,30 +476,40 @@
     if (isBusy) setBusy(false);
   }
 
+  // 根据事件类型做不同的界面处理。
   function handleEvent(eventName, data, agentBubble) {
     if (eventName === "chat_info") {
+      // 后端告诉我们这次会话的 id（新会话时第一次拿到）。
       currentChatId = data.chat_id;
       el("chat-title").textContent = currentChatId;
     } else if (eventName === "token") {
+      // AI 文本片段：追加到当前 AI 气泡。
       agentBubble.textContent += data.text || "";
       scrollToBottom();
     } else if (eventName === "tool_call") {
+      // AI 要调工具：显示“正在调用工具<名字, 参数>”。
       addToolCard(`正在调用工具：${data.name}`, data.args);
       scrollToBottom();
     } else if (eventName === "approval_request") {
+      // 需要审批：弹出同意/拒绝按钮。
       addApprovalBox(data.name, data.args, data.toolcall_id);
       scrollToBottom();
     } else if (eventName === "tool_result") {
+      // 工具结果：显示出来。
       addToolCard(`工具「${data.name}」返回结果`, data.result);
       scrollToBottom();
     } else if (eventName === "error") {
       agentBubble.textContent += `\n（${data.message || "出错了"}）`;
     } else if (eventName === "done") {
+      // 本轮彻底结束：解锁输入框，刷新会话列表（新会话要出现在侧边栏）。
       setBusy(false);
       loadChatList();
     }
   }
 
+  // ============================================================
+  // 审批框：同意 / 拒绝
+  // ============================================================
   function addApprovalBox(toolName, args, toolcallId) {
     const box = document.createElement("div");
     box.className = "approval-box";
@@ -471,6 +526,7 @@
     rejectBtn.className = "reject";
     rejectBtn.textContent = "拒绝";
 
+    // 点击后：把选择发给后端，并把按钮禁用掉（避免重复点）。
     const decide = async (approved) => {
       approveBtn.disabled = true;
       rejectBtn.disabled = true;
@@ -497,6 +553,11 @@
     el("messages").appendChild(box);
   }
 
+  // ============================================================
+  // 渲染小工具：气泡、工具卡片、滚动、上锁
+  // ============================================================
+
+  // 添加一个气泡，返回“气泡内容元素”，方便后续往里追加文字。
   function addBubble(who, text) {
     const row = document.createElement("div");
     row.className = "msg-row " + (who === "user" ? "user" : "agent");
@@ -508,6 +569,7 @@
     return bubble;
   }
 
+  // 添加一张工具卡片（标题 + 内容）。内容若是对象会转成 JSON 显示。
   function addToolCard(title, content) {
     const card = document.createElement("div");
     card.className = "tool-card";
@@ -525,11 +587,13 @@
     el("messages").appendChild(card);
   }
 
+  // 滚动到消息区底部，始终看到最新消息。
   function scrollToBottom() {
     const m = el("messages");
     m.scrollTop = m.scrollHeight;
   }
 
+  // 上锁/解锁发送。
   function setBusy(busy) {
     isBusy = busy;
     el("send-btn").disabled = busy;

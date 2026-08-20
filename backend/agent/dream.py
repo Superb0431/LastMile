@@ -1,4 +1,4 @@
-"""dream."""
+"""对话结束后整理记忆并在需要时压缩上下文。"""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from typing import Optional
 
-from backend.config import MAIN_MODEL, MODEL_CONTEXT_WINDOW, USERS_DIR, LIGHT_DREAM_MODEL, LIGHT_DREAM_API_KEY, EVAL_MODE
+from backend.config import MAIN_MODEL, MODEL_CONTEXT_WINDOW, USERS_DIR, LIGHT_DREAM_MODEL, DEEPSEEK_LIGHT_DREAM_API_KEY, EVAL_MODE
 from backend.agent import llm
 from backend.memory import db
 from backend.tools import registry
@@ -23,12 +23,14 @@ PREFIX_COUNT_THRESHOLD = 12
 PREFIX_USER_MSG_SPAN_THRESHOLD = 20
 LIGHT_DREAM_RECENT_TURNS = 2
 
+
 def _format_dialogue_day(created_at: str | None) -> str:
     try:
         dt = datetime.fromisoformat(created_at)
     except (TypeError, ValueError):
         dt = datetime.now()
     return dt.strftime("%Y年%m月%d日")
+
 
 def _resolve_dialogue_date(turns: list[dict]) -> str:
     for row in reversed(turns):
@@ -43,9 +45,11 @@ def _resolve_dialogue_date(turns: list[dict]) -> str:
             return str(created_at)[:10]
     return ""
 
+
 def _is_vague_record_date(value: str) -> bool:
     v = (value or "").strip()
     return not v or v == "不确定"
+
 
 def _apply_write_record_date_fallback(arguments: dict, dialogue_date: str) -> dict:
     if not dialogue_date:
@@ -63,6 +67,7 @@ def _apply_write_record_date_fallback(arguments: dict, dialogue_date: str) -> di
 
     return args
 
+
 @dataclass
 class PrefixEntry:
     index: int
@@ -70,6 +75,7 @@ class PrefixEntry:
     target_msg_id: int
     user_msg_position: int
     byte_count: int
+
 
 @dataclass
 class ChatDreamState:
@@ -80,7 +86,9 @@ class ChatDreamState:
     summary: str = ""
     cutoff_msg_id: Optional[int] = None
 
+
 _chat_states: dict[str, ChatDreamState] = {}
+
 
 def _read_user_file(username: str, filename: str) -> str:
     file_path = USERS_DIR / username / filename
@@ -88,8 +96,10 @@ def _read_user_file(username: str, filename: str) -> str:
         return ""
     return file_path.read_text(encoding="utf-8").strip()
 
+
 def _serialize_prefix_entries(entries: list[PrefixEntry]) -> str:
     return json.dumps([asdict(e) for e in entries], ensure_ascii=False)
+
 
 def _deserialize_prefix_entries(data: str) -> list[PrefixEntry]:
     if not data:
@@ -106,6 +116,7 @@ def _deserialize_prefix_entries(data: str) -> list[PrefixEntry]:
         for item in items
     ]
 
+
 def _persist_state(username: str, chat_id: str, state: ChatDreamState) -> None:
     db.save_profile_snapshot(
         username=username,
@@ -117,6 +128,7 @@ def _persist_state(username: str, chat_id: str, state: ChatDreamState) -> None:
         next_prefix_index=state.next_prefix_index,
         pending_info=state.pending_info,
     )
+
 
 def get_or_init_state(chat_id: str, username: str) -> ChatDreamState:
     if chat_id in _chat_states:
@@ -140,11 +152,13 @@ def get_or_init_state(chat_id: str, username: str) -> ChatDreamState:
     _chat_states[chat_id] = state
     return state
 
+
 def find_prefix_for_msg(state: ChatDreamState, msg_id: int) -> Optional[PrefixEntry]:
     for entry in state.prefix_entries:
         if entry.target_msg_id == msg_id:
             return entry
     return None
+
 
 def inject_pending_prefix(chat_id: str, username: str, latest_user_msg_id: int) -> None:
     state = get_or_init_state(chat_id, username)
@@ -169,6 +183,7 @@ def inject_pending_prefix(chat_id: str, username: str, latest_user_msg_id: int) 
     _write_prefix_history(username, chat_id, entry)
     _persist_state(username, chat_id, state)
 
+
 def _write_prefix_history(username: str, chat_id: str, entry: PrefixEntry) -> None:
     user_dir = USERS_DIR / username
     user_dir.mkdir(parents=True, exist_ok=True)
@@ -184,11 +199,13 @@ def _write_prefix_history(username: str, chat_id: str, entry: PrefixEntry) -> No
         )
         f.write(f"{entry.content}\n")
 
+
 def _prefix_user_msg_span(state: ChatDreamState) -> int:
     if not state.prefix_entries:
         return 0
     positions = [e.user_msg_position for e in state.prefix_entries]
     return max(positions) - min(positions)
+
 
 def get_summary_cutoff_msg_id(chat_id: str, username: str, state: ChatDreamState) -> Optional[int]:
     history = db.get_messages(chat_id, username, min_id=state.cutoff_msg_id)
@@ -198,6 +215,7 @@ def get_summary_cutoff_msg_id(chat_id: str, username: str, state: ChatDreamState
     if len(user_msg_ids) >= DEEP_DREAM_KEEP_USER_MSGS:
         return user_msg_ids[-DEEP_DREAM_KEEP_USER_MSGS]
     return user_msg_ids[0]
+
 
 def should_deep_dream(chat_id: str, username: str, model: str = MAIN_MODEL) -> bool:
     state = get_or_init_state(chat_id, username)
@@ -218,6 +236,7 @@ def should_deep_dream(chat_id: str, username: str, model: str = MAIN_MODEL) -> b
 
     threshold = MODEL_CONTEXT_WINDOW * 0.30
     return total_tokens > threshold
+
 
 def _collect_recent_turns(
     chat_id: str, username: str, n_turns: int = LIGHT_DREAM_RECENT_TURNS
@@ -241,6 +260,7 @@ def _collect_recent_turns(
         elif role == "assistant" and not row.get("toolcall_id") and not row.get("tool_calls"):
             clean.append(row)
     return clean
+
 
 def _render_recent_turns(
     chat_id: str, username: str, n_turns: int = LIGHT_DREAM_RECENT_TURNS
@@ -293,9 +313,11 @@ def _make_assistant_tool_message(assistant_text: str, tool_calls: list[dict]) ->
         ],
     }
 
+
 async def _run_light_dream_react(
     chat_id: str, username: str, messages: list[dict], dialogue_date: str = ""
 ) -> tuple[str, list[str]]:
+
     messages = list(messages)
 
     tools = registry.get_light_dream_tools()
@@ -313,7 +335,7 @@ async def _run_light_dream_react(
             messages,
             tools=tools,
             model=LIGHT_DREAM_MODEL,
-            api_key=LIGHT_DREAM_API_KEY,
+            api_key=DEEPSEEK_LIGHT_DREAM_API_KEY,
             stage=f"LightDream第{light_call_index}次调用",
             chat_id=chat_id,
             username=username,
@@ -375,7 +397,7 @@ async def _run_light_dream_react(
                 await llm.complete(
                     messages,
                     model=LIGHT_DREAM_MODEL,
-                    api_key=LIGHT_DREAM_API_KEY,
+                    api_key=DEEPSEEK_LIGHT_DREAM_API_KEY,
                     stage=f"LightDream第{light_call_index}次调用",
                     chat_id=chat_id,
                     username=username,
@@ -384,6 +406,7 @@ async def _run_light_dream_react(
             break
 
     return final_text, profile_writes
+
 
 async def light_dream(chat_id: str, username: str) -> None:
     try:
@@ -413,6 +436,7 @@ async def light_dream(chat_id: str, username: str) -> None:
 
     except Exception as error:
         print(f"[light_dream] 整理记忆时出错（已忽略）：{error}")
+
 
 async def deep_dream(chat_id: str, username: str) -> None:
     state = get_or_init_state(chat_id, username)

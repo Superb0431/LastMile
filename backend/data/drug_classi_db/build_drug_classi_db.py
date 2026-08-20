@@ -1,4 +1,4 @@
-"""build_drug_classi_db."""
+"""构建药品分类数据库。"""
 
 from __future__ import annotations
 
@@ -308,17 +308,21 @@ for zh, en in _HAM_B:
 for zh, en in _HAM_C:
     RAW_ENTRIES.append((zh, en, "高警示药品", "C级", "高警示药品推荐目录（2025版）", ""))
 
+
 _ZH_ALIASES: dict[str, str] = {
     "去乙酰毛花苷": "去乙酰毛花苷丙",
     "注射用三氧化二砷": "三氧化二砷",
     "阿托品注射液（规格≥5mg/支）": "阿托品",
 }
 
+
 def _canonical_zh(zh: str) -> str:
     return _ZH_ALIASES.get(zh.strip(), zh.strip())
 
+
 def _norm_key(zh: str, en: str) -> str:
     return en.strip().lower() or _canonical_zh(zh).lower()
+
 
 def build_db() -> dict:
     conn = sqlite3.connect(DB_PATH)
@@ -406,6 +410,7 @@ def build_db() -> dict:
     finally:
         conn.close()
 
+
 def build_md(stats: dict) -> None:
     conn = sqlite3.connect(DB_PATH)
     try:
@@ -468,6 +473,7 @@ def build_md(stats: dict) -> None:
     finally:
         conn.close()
 
+
 def main() -> None:
     stats = build_db()
     build_md(stats)
@@ -476,6 +482,7 @@ def main() -> None:
     print(f"分类条目：{stats['total_entries']} 条，去重后：{stats['unique_drugs']} 种")
     for cat, n in stats["by_category"].items():
         print(f"  - {cat}: {n}")
+
 
 if __name__ == "__main__":
     main()

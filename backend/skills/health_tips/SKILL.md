@@ -1,16 +1,31 @@
-# health_tips
+# Skill: health_tips（健康小贴士）
 
-Provide everyday self-management tips for common chronic conditions
-(e.g. hypertension, diabetes). Always remind users to follow clinical advice.
+这是一个示例 Skill，演示 Anthropic 风格的技能包结构。当前只作为样例，
+让 skill_loader 工具有东西可以加载。
 
-## When to use
+## 这个技能能做什么
 
-User asks about daily health management for chronic conditions.
+为用户提供常见慢性病（如高血压、糖尿病）的日常生活管理建议。
 
-## Guidance
+## 何时使用
 
-- Diet: lower salt/sugar/fat; more vegetables and fruit
-- Exercise: regular moderate activity as tolerated
-- Monitoring: track blood pressure / glucose
-- Medication: follow prescribed regimens; do not stop on your own
-- Seek care for concerning symptoms (persistent dizziness, chest discomfort, etc.)
+当用户询问“我有高血压平时要注意什么”这类“日常健康管理”问题时，可以加载本技能，
+按下面的要点给出温和、通俗的建议，并提醒：具体方案请遵医嘱。
+
+## 要点
+
+- 饮食：低盐、低糖、低脂；多吃蔬菜水果。
+- 运动：规律的中等强度运动（如快走），量力而行。
+- 监测：定期测量血压/血糖并记录。
+- 用药：遵医嘱按时服药，不要自行停药。
+- 就医信号：出现明显不适（如持续头晕、胸闷）应及时就医。
+
+## 文件夹结构说明
+
+```
+health_tips/
+  SKILL.md      <- 你正在看的这个文件，技能的总说明
+  scripts/      <- 放可执行脚本（本示例为空）
+  references/   <- 放参考资料（本示例为空）
+  assets/       <- 放图片等素材（本示例为空）
+```

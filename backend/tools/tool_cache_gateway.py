@@ -1,4 +1,4 @@
-"""tool_cache_gateway."""
+"""把工具结果缓存在 Redis 里。"""
 
 import json
 import logging
@@ -10,13 +10,16 @@ from backend.config import REDIS_URL, TOOL_CACHE_DEFAULT_TTL_SECONDS
 from backend.memory import db
 from backend.tools import registry
 
+
 logger = logging.getLogger(__name__)
 
 _client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
 
+
 def _make_key(username: str, tool_name: str, arguments: Optional[dict]) -> str:
     args_text = json.dumps(arguments or {}, ensure_ascii=False, sort_keys=True)
     return f"{username}::{tool_name}::{args_text}"
+
 
 def _safe_redis_get(key: str) -> Optional[str]:
     try:
@@ -25,11 +28,13 @@ def _safe_redis_get(key: str) -> Optional[str]:
         logger.warning("Redis GET 失败，降级为 cache miss：%s", error)
         return None
 
+
 def _safe_redis_set(key: str, value: str, ttl: int) -> None:
     try:
         _client.setex(key, ttl, value)
     except redis.RedisError as error:
         logger.warning("Redis SETEX 失败，跳过缓存写入：%s", error)
+
 
 def _should_cache(result: str) -> bool:
     text = result.strip()
@@ -37,12 +42,15 @@ def _should_cache(result: str) -> bool:
         return False
     return True
 
+
 def execute(
     username: str,
     tool_name: str,
     arguments: dict,
     toolcall_id: str,
 ) -> str:
+
+
     policy = registry.get_cache_policy(tool_name)
 
     if policy != "redis":

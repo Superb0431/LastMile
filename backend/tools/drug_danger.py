@@ -1,4 +1,4 @@
-"""drug_danger."""
+"""检查药品是否属于高危或特殊管理目录。"""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import json
 import sqlite3
 
 from backend.config import DRUG_CLASSI_DB_PATH
+
 
 def run_check_drug_danger(drug_name: str) -> str:
     name = (drug_name or "").strip()

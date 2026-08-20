@@ -1,4 +1,4 @@
-"""db."""
+"""用 SQLite 存聊天消息和相关数据。"""
 
 import sqlite3
 import json
@@ -8,10 +8,12 @@ from typing import Optional
 
 from backend.config import USERS_DIR
 
+
 def _user_db_path(username: str) -> Path:
     user_dir = USERS_DIR / username
     user_dir.mkdir(parents=True, exist_ok=True)
     return user_dir / "messages.db"
+
 
 def _connect_user(username: str) -> sqlite3.Connection:
     conn = sqlite3.connect(_user_db_path(username))
@@ -20,17 +22,17 @@ def _connect_user(username: str) -> sqlite3.Connection:
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS messages (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            chat_id     TEXT    NOT NULL,
-            username    TEXT    NOT NULL,
-            role        TEXT    NOT NULL,
-            content     TEXT,
-            toolcall_id TEXT,
-            tool_name   TEXT,
-            tool_args   TEXT,
-            tool_calls  TEXT,
-            created_at  TEXT    NOT NULL,
-            task_id     TEXT
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,  -- 消息编号，从 1 自增
+            chat_id     TEXT    NOT NULL,                   -- 属于哪个会话
+            username    TEXT    NOT NULL,                   -- 属于哪个用户
+            role        TEXT    NOT NULL,                   -- user / assistant / tool
+            content     TEXT,                               -- 消息正文
+            toolcall_id TEXT,                               -- 工具结果配对 ID（tool 消息用；默认 NULL）
+            tool_name   TEXT,                               -- 工具名（tool 消息用；默认 NULL）
+            tool_args   TEXT,                               -- 工具参数 JSON（默认 NULL）
+            tool_calls  TEXT,                               -- assistant 的整组工具调用 JSON（默认 NULL）
+            created_at  TEXT    NOT NULL,                   -- 创建时间
+            task_id     TEXT                                -- 异步任务 ID（幂等清理用）
         )
         """
     )
@@ -43,14 +45,14 @@ def _connect_user(username: str) -> sqlite3.Connection:
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS tool_results (
-            id               INTEGER PRIMARY KEY AUTOINCREMENT,
-            toolcall_id      TEXT    NOT NULL,
-            tool_name        TEXT    NOT NULL,
-            args             TEXT,
-            result           TEXT,
-            from_cache       INTEGER NOT NULL DEFAULT 0,
-            cache_key        TEXT,
-            source_result_id INTEGER,
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,  -- 工具结果的唯一 ID
+            toolcall_id      TEXT    NOT NULL,                   -- 对应哪一次工具调用
+            tool_name        TEXT    NOT NULL,                   -- 工具名
+            args             TEXT,                               -- 调用参数 JSON
+            result           TEXT,                               -- 工具返回的结果文本
+            from_cache       INTEGER NOT NULL DEFAULT 0,         -- 0=真执行 1=命中缓存
+            cache_key        TEXT,                               -- 对应的 Redis key
+            source_result_id INTEGER,                            -- 命中缓存时指向首次执行的 id
             created_at       TEXT    NOT NULL
         )
         """
@@ -121,8 +123,10 @@ def _connect_user(username: str) -> sqlite3.Connection:
     conn.commit()
     return conn
 
+
 def init_db() -> None:
     return None
+
 
 def add_message(
     chat_id: str,
@@ -136,6 +140,7 @@ def add_message(
     created_at: Optional[str] = None,
     task_id: Optional[str] = None,
 ) -> int:
+
     tool_args_json = json.dumps(tool_args, ensure_ascii=False) if tool_args is not None else None
     tool_calls_json = json.dumps(tool_calls, ensure_ascii=False) if tool_calls is not None else None
     now = created_at or datetime.now().isoformat(timespec="seconds")
@@ -155,12 +160,14 @@ def add_message(
     finally:
         conn.close()
 
+
 def get_messages(
     chat_id: str,
     username: str,
     min_id: Optional[int] = None,
     max_id_exclusive: Optional[int] = None,
 ) -> list[dict]:
+
     conn = _connect_user(username)
     try:
         query = "SELECT * FROM messages WHERE chat_id = ?"
@@ -176,6 +183,163 @@ def get_messages(
         return [_row_to_message_dict(row) for row in rows]
     finally:
         conn.close()
+
+
+def search_messages(
+    username: str,
+    keywords: list[str],
+    *,
+    roles: tuple[str, ...] = ("user", "assistant"),
+    limit: int = 50,
+) -> list[dict]:
+
+    cleaned = [kw.strip() for kw in keywords if kw and str(kw).strip()]
+    if not cleaned:
+        return []
+    limit = max(1, min(int(limit), 200))
+
+    conn = _connect_user(username)
+    try:
+        role_placeholders = ",".join("?" for _ in roles)
+        like_clauses = " OR ".join("content LIKE ?" for _ in cleaned)
+        sql = f"""
+            SELECT id, chat_id, role, content, created_at, tool_calls
+            FROM messages
+            WHERE role IN ({role_placeholders})
+              AND content IS NOT NULL
+              AND ({like_clauses})
+            ORDER BY id DESC
+            LIMIT ?
+        """
+        params: list = list(roles) + [f"%{kw}%" for kw in cleaned] + [limit]
+        rows = conn.execute(sql, params).fetchall()
+        results: list[dict] = []
+        for row in rows:
+            if row["role"] == "assistant" and row["tool_calls"]:
+                continue
+            content = row["content"] or ""
+            matched = next((kw for kw in cleaned if kw in content), cleaned[0])
+            results.append(
+                {
+                    "id": row["id"],
+                    "chat_id": row["chat_id"],
+                    "role": row["role"],
+                    "content": content,
+                    "created_at": row["created_at"],
+                    "matched_keyword": matched,
+                }
+            )
+        return results
+    finally:
+        conn.close()
+
+
+def find_message_background(
+    username: str,
+    message_id: int,
+    k: int = 1,
+) -> dict:
+
+    k = max(0, int(k))
+    conn = _connect_user(username)
+    try:
+        anchor_row = conn.execute(
+            "SELECT id, chat_id, role, content, created_at, tool_calls FROM messages WHERE id = ?",
+            (message_id,),
+        ).fetchone()
+        if anchor_row is None:
+            return {"error": f"未找到 message_id={message_id}", "anchor": None, "turns": []}
+
+        anchor = {
+            "id": anchor_row["id"],
+            "chat_id": anchor_row["chat_id"],
+            "role": anchor_row["role"],
+            "content": anchor_row["content"] or "",
+            "created_at": anchor_row["created_at"],
+        }
+        chat_id = anchor["chat_id"]
+        rows = conn.execute(
+            """
+            SELECT id, chat_id, role, content, created_at, tool_calls
+            FROM messages
+            WHERE chat_id = ? AND role IN ('user', 'assistant')
+            ORDER BY id ASC
+            """,
+            (chat_id,),
+        ).fetchall()
+        row_dicts = [
+            {
+                "id": row["id"],
+                "role": row["role"],
+                "content": row["content"] or "",
+                "created_at": row["created_at"],
+                "tool_calls": row["tool_calls"],
+            }
+            for row in rows
+        ]
+    finally:
+        conn.close()
+
+    clean: list[dict] = []
+    for row in row_dicts:
+        role = row["role"]
+        if role == "user":
+            clean.append(row)
+        elif role == "assistant" and not row["tool_calls"]:
+            clean.append(row)
+
+    turns: list[dict] = []
+    i = 0
+    while i < len(clean):
+        if clean[i]["role"] != "user":
+            i += 1
+            continue
+        user_msg = clean[i]
+        assistant_msg = None
+        j = i + 1
+        if j < len(clean) and clean[j]["role"] == "assistant":
+            assistant_msg = clean[j]
+            j += 1
+        turns.append(
+            {
+                "user": user_msg["content"],
+                "assistant": (assistant_msg or {}).get("content", ""),
+                "created_at": user_msg["created_at"],
+                "user_id": user_msg["id"],
+                "assistant_id": (assistant_msg or {}).get("id"),
+            }
+        )
+        i = j
+
+    anchor_idx = None
+    for idx, turn in enumerate(turns):
+        ids = {turn["user_id"], turn.get("assistant_id")}
+        if message_id in ids:
+            anchor_idx = idx
+            break
+    if anchor_idx is None and turns:
+        candidates = [i for i, t in enumerate(turns) if t["user_id"] <= message_id]
+        anchor_idx = candidates[-1] if candidates else 0
+
+    if anchor_idx is None:
+        return {"anchor": anchor, "turns": []}
+
+    start = max(0, anchor_idx - k)
+    end = min(len(turns), anchor_idx + k + 1)
+    window = turns[start:end]
+    return {
+        "anchor": anchor,
+        "anchor_turn_index": anchor_idx,
+        "turns": [
+            {
+                "user": t["user"],
+                "assistant": t["assistant"],
+                "created_at": t["created_at"],
+            }
+            for t in window
+        ],
+    }
+
 
 def get_profile_snapshot(username: str, chat_id: str) -> Optional[dict]:
     conn = _connect_user(username)
@@ -199,6 +363,7 @@ def get_profile_snapshot(username: str, chat_id: str) -> Optional[dict]:
         }
     finally:
         conn.close()
+
 
 def save_profile_snapshot(
     username: str,
@@ -246,6 +411,7 @@ def save_profile_snapshot(
     finally:
         conn.close()
 
+
 def delete_messages_by_task_id(username: str, chat_id: str, task_id: str) -> int:
     if not task_id:
         return 0
@@ -259,6 +425,7 @@ def delete_messages_by_task_id(username: str, chat_id: str, task_id: str) -> int
         return cursor.rowcount
     finally:
         conn.close()
+
 
 def list_chats(username: str) -> list[dict]:
     conn = _connect_user(username)
@@ -278,6 +445,7 @@ def list_chats(username: str) -> list[dict]:
     finally:
         conn.close()
 
+
 def save_tool_result(
     username: str,
     toolcall_id: str,
@@ -288,6 +456,8 @@ def save_tool_result(
     cache_key: Optional[str] = None,
     source_result_id: Optional[int] = None,
 ) -> int:
+
+
     args_json = json.dumps(args, ensure_ascii=False) if args is not None else None
     now = datetime.now().isoformat(timespec="seconds")
 
@@ -316,6 +486,7 @@ def save_tool_result(
     finally:
         conn.close()
 
+
 def find_source_result_id(username: str, cache_key: str) -> Optional[int]:
     conn = _connect_user(username)
     try:
@@ -330,6 +501,7 @@ def find_source_result_id(username: str, cache_key: str) -> Optional[int]:
         return row["id"] if row else None
     finally:
         conn.close()
+
 
 def get_tool_result(username: str, toolcall_id: str) -> Optional[dict]:
     conn = _connect_user(username)
@@ -351,8 +523,10 @@ def get_tool_result(username: str, toolcall_id: str) -> Optional[dict]:
     finally:
         conn.close()
 
+
 def _now_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
+
 
 def add_ehr_record(
     username: str,
@@ -388,6 +562,7 @@ def add_ehr_record(
     finally:
         conn.close()
 
+
 def add_interval_record(
     username: str,
     symptom_date: str,
@@ -408,6 +583,7 @@ def add_interval_record(
     finally:
         conn.close()
 
+
 def list_ehr_records(username: str) -> list[dict]:
     conn = _connect_user(username)
     try:
@@ -418,6 +594,7 @@ def list_ehr_records(username: str) -> list[dict]:
     finally:
         conn.close()
 
+
 def list_interval_records(username: str) -> list[dict]:
     conn = _connect_user(username)
     try:
@@ -427,6 +604,7 @@ def list_interval_records(username: str) -> list[dict]:
         return [dict(row) for row in rows]
     finally:
         conn.close()
+
 
 def save_drug_mentions(
     username: str,
@@ -451,6 +629,7 @@ def save_drug_mentions(
     finally:
         conn.close()
 
+
 def get_drug_mentions(username: str, message_id: int) -> list[str]:
     conn = _connect_user(username)
     try:
@@ -467,6 +646,7 @@ def get_drug_mentions(username: str, message_id: int) -> list[str]:
         return json.loads(row["drugs"] or "[]")
     finally:
         conn.close()
+
 
 def format_timeline_text(username: str) -> str:
     ehr_rows = list_ehr_records(username)
@@ -494,6 +674,7 @@ def format_timeline_text(username: str) -> str:
                 f"  症状：{row['symptoms']}"
             )
     return "\n".join(lines)
+
 
 def _row_to_message_dict(row: sqlite3.Row) -> dict:
     row_keys = row.keys()

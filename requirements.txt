@@ -1,13 +1,27 @@
-fastapi>=0.136.3
-uvicorn[standard]>=0.49.0
-litellm>=1.88.0
-tavily-python>=0.7.25
-python-dotenv>=1.2.2
-sse-starlette>=3.4.4
-pydantic>=2.13.4
-redis>=5.0.0
-pyahocorasick>=2.0.0
+# ============================================================
+# 项目依赖清单
+# 安装方法：pip install -r requirements.txt
+# 每一行后面都写了“这个包是干嘛的”，方便你看懂。
+#
+# 这里用的是“最低版本(>=)”而不是“锁死某个版本(==)”，
+# 这样不会强行把你电脑里已有的新版本降级，避免和你其它项目打架。
+#
+# 【强烈建议】用一个独立的虚拟环境来跑本项目，互不干扰：
+#   python -m venv .venv
+#   .venv\Scripts\activate        (Windows PowerShell)
+#   pip install -r requirements.txt
+# ============================================================
 
-# Optional: Prompt Guard semantic checks (SECURITY_*_SEMANTIC=true)
+fastapi>=0.136.3          # Web 后端框架，用来写接口
+uvicorn[standard]>=0.49.0 # 运行 FastAPI 的服务器（相当于发动机）
+litellm>=1.88.0           # 统一调用各家大模型（我们用 DeepSeek V4）的工具库
+tavily-python>=0.7.25     # Tavily 联网搜索的官方库（web_search 工具要用）
+python-dotenv>=1.2.2      # 读取 .env 文件里的密钥（API Key）
+sse-starlette>=3.4.4      # 让 FastAPI 支持 SSE（服务器把消息一点点推给浏览器）
+pydantic>=2.13.4          # 定义接口的数据格式（请求体长什么样）
+redis>=5.0.0             # 工具结果缓存用的 Redis 客户端（tool_cache_gateway 用）
+pyahocorasick>=2.0.0     # AC 自动机：一次扫描匹配回复中出现的所有药名
+
+# ---- 可选：Prompt Guard 语义安全检测（SECURITY_QUERY_SEMANTIC=true 时需要）----
 # transformers>=4.40.0
 # torch>=2.0.0

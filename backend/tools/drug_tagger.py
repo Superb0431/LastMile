@@ -1,4 +1,4 @@
-"""drug_tagger."""
+"""从文本里识别药品名称。"""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import sqlite3
 from functools import lru_cache
 
 from backend.config import DATA_DIR, DRUG_CLASSI_DB_PATH
+
 
 @lru_cache(maxsize=1)
 def _load_drug_names() -> tuple[str, ...]:
@@ -46,6 +47,7 @@ def _load_drug_names() -> tuple[str, ...]:
 
     return tuple(sorted(names, key=len, reverse=True))
 
+
 @lru_cache(maxsize=1)
 def _build_automaton():
     try:
@@ -64,6 +66,7 @@ def _build_automaton():
         print(f"[drug_tagger] AC 自动机构建失败：{error}")
         return None
 
+
 def _dedupe_longest_matches(matches: list[tuple[int, int, str]]) -> list[tuple[int, int, str]]:
     if not matches:
         return []
@@ -76,6 +79,7 @@ def _dedupe_longest_matches(matches: list[tuple[int, int, str]]) -> list[tuple[i
             continue
         kept.append((start, end, name))
     return sorted(kept, key=lambda item: item[0])
+
 
 def find_drugs(text: str) -> list[str]:
     if not text:

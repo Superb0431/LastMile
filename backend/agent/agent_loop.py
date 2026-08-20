@@ -1,4 +1,4 @@
-"""agent_loop."""
+"""一轮对话的主循环。"""
 
 import asyncio
 import json
@@ -7,6 +7,7 @@ from typing import AsyncGenerator, Optional
 from backend.agent import llm
 from backend.agent import dream
 from backend.agent import approval
+from backend.agent import heartbeat
 from backend.agent.security import (
     BLOCKED_REPLY_MARKER,
     SafeStreamFilter,
@@ -34,9 +35,11 @@ from backend.tools import registry
 from backend.tools import tool_cache_gateway
 from backend.tools.drug_tagger import find_drugs
 
+
 def _preview(text: str, n: int = 40) -> str:
     one_line = (text or "").replace("\n", " ")
     return one_line[:n] + ("…" if len(one_line) > n else "")
+
 
 class SimpleMessageQueue:
     def __init__(self) -> None:
@@ -48,6 +51,7 @@ class SimpleMessageQueue:
     async def get(self) -> str:
         return await self._queue.get()
 
+
 async def _iter_safe_llm_stream(
     messages: list[dict],
     tools: list | None,
@@ -56,6 +60,7 @@ async def _iter_safe_llm_stream(
     username: str,
     stream_filter: SafeStreamFilter,
 ) -> AsyncGenerator[tuple, None]:
+
     assistant_text = ""
     pending_tool_calls: list = []
 
@@ -86,11 +91,13 @@ async def _iter_safe_llm_stream(
 
     yield ("complete", assistant_text, pending_tool_calls)
 
+
 def _safety_flag_event(result: SafetyResult) -> dict:
     payload = {"category": result.category, "rule": result.rule}
     if result.span:
         payload["span_start"], payload["span_end"] = result.span
     return make_event(EVENT_SAFETY_FLAG, **payload)
+
 
 async def _handle_stream_blocked(
     chat_id: str,
@@ -112,6 +119,7 @@ async def _handle_stream_blocked(
     )
     yield make_event(EVENT_DONE, chat_id=chat_id)
 
+
 def _check_final_reply(
     chat_id: str,
     username: str,
@@ -123,6 +131,7 @@ def _check_final_reply(
     log_safety_hit("reply", username, chat_id, result, assistant_text)
     print(f"[AgentLoop] 回复二次检测命中 category={result.category} rule={result.rule}")
     return result
+
 
 def _record_drug_mentions(
     chat_id: str,
@@ -138,6 +147,7 @@ def _record_drug_mentions(
         print(f"[AgentLoop] 药物识别 msg_id={message_id} drugs={drugs}")
     except Exception as error:
         print(f"[AgentLoop] 药物识别落库失败：{error}")
+
 
 async def _reject_and_finish(
     chat_id: str,
@@ -165,6 +175,7 @@ async def _reject_and_finish(
     yield make_event(EVENT_TOKEN, text=refuse_text)
     yield make_event(EVENT_DONE, chat_id=chat_id)
 
+
 async def run_agent_turn(
     chat_id: str,
     username: str,
@@ -172,6 +183,26 @@ async def run_agent_turn(
     created_at: Optional[str] = None,
     task_id: Optional[str] = None,
 ) -> AsyncGenerator[dict, None]:
+
+
+    heartbeat.mark_busy(username, chat_id)
+    try:
+        async for event in _run_agent_turn_body(
+            chat_id, username, user_message, created_at, task_id
+        ):
+            yield event
+    finally:
+        heartbeat.mark_idle(username, chat_id)
+
+
+async def _run_agent_turn_body(
+    chat_id: str,
+    username: str,
+    user_message: str,
+    created_at: Optional[str] = None,
+    task_id: Optional[str] = None,
+) -> AsyncGenerator[dict, None]:
+
     yield make_event(EVENT_CHAT_INFO, chat_id=chat_id)
 
     print(f"[AgentLoop] 收到用户消息 chat={chat_id} content=\"{_preview(user_message)}\"")
@@ -480,7 +511,9 @@ async def run_agent_turn(
         await dream.deep_dream(chat_id, username)
 
     print(f"[AgentLoop] 本轮结束 chat={chat_id}")
+    heartbeat.touch(username, chat_id)
     yield make_event(EVENT_DONE, chat_id=chat_id)
+
 
 async def _finish_one_tool(
     chat_id: str,
@@ -504,6 +537,7 @@ async def _finish_one_tool(
     )
     yield make_event(EVENT_TOOL_RESULT, toolcall_id=toolcall_id, name=name, result=result_text)
 
+
 def _make_assistant_tool_message(assistant_text: str, tool_calls: list[dict]) -> dict:
     return {
         "role": "assistant",
@@ -520,6 +554,7 @@ def _make_assistant_tool_message(assistant_text: str, tool_calls: list[dict]) ->
             for tc in tool_calls
         ],
     }
+
 
 def _store_assistant_tool_calls(
     chat_id: str,

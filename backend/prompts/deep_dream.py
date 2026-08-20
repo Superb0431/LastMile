@@ -1,4 +1,4 @@
-"""deep_dream."""
+"""Deep Dream 的提示词。"""
 
 DEEP_DREAM_SUMMARY_INSTRUCTION = """
 [SystemNotice] 请对以上对话做上下文压缩摘要。
@@ -8,7 +8,7 @@ DEEP_DREAM_SUMMARY_INSTRUCTION = """
 请严格按以下结构输出（保留标题）：
 
 ## 初始意图（INITIAL INTENT）
-用 1-2 句话概括用户**第一条诉求**（INITIAL INTENT）。
+用 1-2 句话概括用户**第一条诉求**（INITIAL INTENT）。这是最重要的信息——重复强调三次：INITIAL INTENT 决定后续所有建议方向。
 
 ## 当前关注点（CURRENT FOCUS）
 用户**当前**最关心的问题是什么？（CURRENT FOCUS）
@@ -27,6 +27,7 @@ IMPORTANT: INITIAL INTENT 必须准确。CURRENT FOCUS 必须反映最新状态�
 """.strip()
 
 DEEP_DREAM_SUMMARY_INSTRUCTION_EVAL = DEEP_DREAM_SUMMARY_INSTRUCTION
+
 
 def get_deep_dream_summary_instruction(eval_mode: bool = False) -> str:
     if eval_mode:

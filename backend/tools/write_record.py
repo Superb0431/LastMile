@@ -1,4 +1,4 @@
-"""write_record."""
+"""写入用户画像或病历记录。"""
 
 from pathlib import Path
 from typing import Optional
@@ -6,10 +6,12 @@ from typing import Optional
 from backend.config import USERS_DIR
 from backend.memory import db
 
+
 def _profile_path(username: str) -> Path:
     user_dir = USERS_DIR / username
     user_dir.mkdir(parents=True, exist_ok=True)
     return user_dir / "profile.md"
+
 
 def run_write_record(
     username: str,
@@ -25,6 +27,7 @@ def run_write_record(
     symptoms: str = "",
     record_date: str = "",
 ) -> str:
+
     target = (target or "").strip().lower()
     record_date_val: Optional[str] = record_date.strip() if record_date and record_date.strip() else None
 
@@ -50,6 +53,7 @@ def run_write_record(
         )
     return f"（未知的写入目标：{target}，请使用 profile / ehr / interval。）"
 
+
 def _write_profile(username: str, content: str) -> str:
     if not content or not content.strip():
         return "（profile 内容为空，已跳过。）"
@@ -59,6 +63,7 @@ def _write_profile(username: str, content: str) -> str:
             f.write(f"# {username} 的用户画像\n\n")
         f.write(f"- {content.strip()}\n")
     return f"已更新用户画像：{content.strip()}"
+
 
 def _write_ehr(
     username: str,
@@ -84,6 +89,7 @@ def _write_ehr(
     )
     return f"已写入 EHR 就诊记录（id={record_id}），到院日期：{visit_date.strip()}"
 
+
 def _write_interval(
     username: str,
     symptom_date: str,
@@ -101,6 +107,7 @@ def _write_interval(
         record_date=record_date,
     )
     return f"已写入 Interval 症状记录（id={record_id}），日期：{symptom_date.strip()}"
+
 
 WRITE_RECORD_FULL_INSTRUCTION = """
 write_record 工具完整说明：

@@ -1,4 +1,4 @@
-"""llm_stats."""
+"""记录模型调用的 token 用量和缓存命中情况。"""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from dataclasses import dataclass, asdict
 from typing import Optional
 
 from backend.config import ENABLE_LLM_STATS, USERS_DIR
+
 
 @dataclass
 class LLMStats:
@@ -25,11 +26,13 @@ class LLMStats:
     tool_call_count: int = 0
     timestamp: float = 0.0
 
+
 def report(stats: LLMStats) -> None:
     stats.timestamp = time.time()
     _print_stats(stats)
     if ENABLE_LLM_STATS and stats.username:
         _store_stats(stats)
+
 
 def _print_stats(s: LLMStats) -> None:
     cache_part = f"cache={s.cache_hit_rate:.0%} " if s.input_tokens > 0 else ""
@@ -41,8 +44,10 @@ def _print_stats(s: LLMStats) -> None:
         f"tools={s.tool_call_count}"
     )
 
+
 def _get_db_path(username: str):
     return USERS_DIR / username / "messages.db"
+
 
 def _ensure_table(conn: sqlite3.Connection) -> None:
     conn.execute("""
@@ -62,6 +67,7 @@ def _ensure_table(conn: sqlite3.Connection) -> None:
             created_at  REAL
         )
     """)
+
 
 def _store_stats(s: LLMStats) -> None:
     try:
@@ -87,6 +93,7 @@ def _store_stats(s: LLMStats) -> None:
         conn.close()
     except Exception as e:
         print(f"[LLM统计] 写入数据库失败（已忽略）：{e}")
+
 
 def extract_cache_info(usage) -> tuple[int, int]:
     if not usage:

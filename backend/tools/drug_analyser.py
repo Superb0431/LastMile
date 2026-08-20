@@ -1,4 +1,4 @@
-"""drug_analyser."""
+"""分析药物相互作用。"""
 
 import sqlite3
 from itertools import combinations
@@ -6,6 +6,7 @@ from itertools import combinations
 from backend.config import DATA_DIR
 
 _DB_PATH = DATA_DIR / "drug_interactions.db"
+
 
 def _load_interactions(names: list[str]) -> dict[str, set[str]]:
     if not names:
@@ -31,6 +32,7 @@ def _load_interactions(names: list[str]) -> dict[str, set[str]]:
             x.strip().lower() for x in (interactions or "").split("|") if x.strip()
         }
     return result
+
 
 def run_drug_interaction(drugs: list[str]) -> str:
     names = [d.strip() for d in drugs if d and d.strip()]

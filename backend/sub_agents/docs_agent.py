@@ -1,4 +1,4 @@
-"""docs_agent."""
+"""阅读医学文档的子 Agent。"""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ DOCS_AGENT_SYSTEM_PROMPT = """
 }
 """.strip()
 
+
 def _search_docs(query: str, limit: int = 5) -> list[dict]:
     if not DOCS_INDEX_DB_PATH.exists():
         return []
@@ -42,6 +43,7 @@ def _search_docs(query: str, limit: int = 5) -> list[dict]:
     finally:
         conn.close()
 
+
 def docs_agent_llm_call(messages: list[dict]) -> str:
     kwargs: dict = {
         "model": DOCS_AGENT_MODEL,
@@ -52,6 +54,7 @@ def docs_agent_llm_call(messages: list[dict]) -> str:
         kwargs["api_base"] = DOCS_AGENT_API_BASE
     response = litellm.completion(**kwargs)
     return response.choices[0].message.content or ""
+
 
 def run_docs_agent(query: str) -> str:
     hits = _search_docs(query)

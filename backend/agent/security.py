@@ -1,4 +1,4 @@
-"""security."""
+"""对用户输入和模型输出做安全审查。"""
 
 from __future__ import annotations
 
@@ -20,12 +20,14 @@ from backend.config import (
 
 BLOCKED_REPLY_MARKER = "（回复被安全拦截）"
 
+
 @dataclass
 class SafetyResult:
     safe: bool
     category: str = ""
     rule: str = ""
     span: tuple[int, int] | None = None
+
 
 KeywordRule = tuple[str, str, str, bool]
 
@@ -78,6 +80,7 @@ OUTPUT_REGEX_RULES: list[tuple[str, str, re.Pattern[str]]] = [
 
 QUERY_MAX_LENGTH = 10_000
 
+
 def _keyword_match(
     text: str,
     keyword_rules: list[KeywordRule],
@@ -115,6 +118,7 @@ def _keyword_match(
             )
     return None
 
+
 def _structural_query_check(text: str) -> SafetyResult | None:
     if len(text) > QUERY_MAX_LENGTH:
         return SafetyResult(
@@ -124,8 +128,10 @@ def _structural_query_check(text: str) -> SafetyResult | None:
         )
     return None
 
+
 def _semantic_match(_text: str, _scene: str) -> SafetyResult | None:
     return None
+
 
 def _run_checks(text: str, scene: str) -> SafetyResult:
     if not text:
@@ -155,18 +161,22 @@ def _run_checks(text: str, scene: str) -> SafetyResult:
 
     return SafetyResult(safe=True)
 
+
 def is_query_safe(content: str) -> SafetyResult:
     return _run_checks(content, "query")
+
 
 @dataclass
 class SpaciousResult:
     score: float
-    level: str  # block / warn / pass
+    level: str
     available: bool = True
     error: str = ""
 
+
 _prompt_guard_model = None
 _prompt_guard_tokenizer = None
+
 
 def _load_prompt_guard() -> tuple[bool, str]:
     global _prompt_guard_model, _prompt_guard_tokenizer
@@ -184,6 +194,7 @@ def _load_prompt_guard() -> tuple[bool, str]:
         return True, ""
     except Exception as error:
         return False, str(error)
+
 
 def is_query_spacious(content: str) -> SpaciousResult:
     cfg = SECURITY_CONFIG.get("query", {})
@@ -217,11 +228,14 @@ def is_query_spacious(content: str) -> SpaciousResult:
         level = "pass"
     return SpaciousResult(score=attack_score, level=level)
 
+
 def is_reply_stream_safe(content: str) -> SafetyResult:
     return _run_checks(content, "reply_stream")
 
+
 def is_reply_safe(content: str) -> SafetyResult:
     return _run_checks(content, "reply")
+
 
 class SafeStreamFilter:
     def __init__(
@@ -265,6 +279,7 @@ class SafeStreamFilter:
         chunk = self._buffer
         self._buffer = ""
         return [chunk], None
+
 
 def log_safety_hit(
     scene: str,

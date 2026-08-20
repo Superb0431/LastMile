@@ -1,4 +1,4 @@
-"""context_builder."""
+"""拼装发给大模型的上下文。"""
 
 import hashlib
 import json
@@ -9,6 +9,7 @@ from backend.memory import db
 from backend.prompts.main_agent import get_system_prompt_with_profile
 from backend.agent import dream
 
+
 def _format_day(created_at: str | None) -> str:
     try:
         dt = datetime.fromisoformat(created_at)
@@ -16,8 +17,10 @@ def _format_day(created_at: str | None) -> str:
         dt = datetime.now()
     return dt.strftime("%Y年%m月%d日")
 
+
 def _format_prefix_tag(entry: dream.PrefixEntry) -> str:
     return f"[Info_append.{entry.index}]\n{entry.content}\n[/Info_append.{entry.index}]"
+
 
 def _history_row_to_message(row: dict, prefix: dream.PrefixEntry | None = None) -> dict:
     role = row["role"]
@@ -44,6 +47,7 @@ def _history_row_to_message(row: dict, prefix: dream.PrefixEntry | None = None) 
         return {"role": "user", "content": content}
 
     return {"role": role, "content": content}
+
 
 def build_context(chat_id: str, username: str) -> list[dict]:
     state = dream.get_or_init_state(chat_id, username)
@@ -77,6 +81,7 @@ def build_context(chat_id: str, username: str) -> list[dict]:
 
     return messages
 
+
 def build_context_for_deep_dream_summary(chat_id: str, username: str) -> list[dict]:
     state = dream.get_or_init_state(chat_id, username)
     messages: list[dict] = []
@@ -108,6 +113,7 @@ def build_context_for_deep_dream_summary(chat_id: str, username: str) -> list[di
         messages.append(_history_row_to_message(row, prefix))
 
     return messages
+
 
 def compute_prefix_hash(messages: list[dict]) -> str:
     serialized = json.dumps(messages, ensure_ascii=False, sort_keys=True)

@@ -1,4 +1,4 @@
-"""build_docs_index."""
+"""为医学文档建立检索索引。"""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ if str(ROOT) not in sys.path:
 from backend.config import DOCS_INDEX_DB_PATH, MEDICAL_DOCS_DIR
 
 SECTION_RE = re.compile(r"^##\s+(.+)$", re.MULTILINE)
+
 
 def _parse_markdown(path: Path) -> tuple[str, str, list[tuple[str, str]]]:
     text = path.read_text(encoding="utf-8")
@@ -43,6 +44,7 @@ def _parse_markdown(path: Path) -> tuple[str, str, list[tuple[str, str]]]:
     if current_lines:
         sections.append((current_section, "\n".join(current_lines).strip()))
     return doc_id, title, sections if sections else [(title, text)]
+
 
 def build_index() -> None:
     MEDICAL_DOCS_DIR.mkdir(parents=True, exist_ok=True)
@@ -100,6 +102,7 @@ def build_index() -> None:
         print(f"索引完成：{count} 个片段 -> {DOCS_INDEX_DB_PATH}")
     finally:
         conn.close()
+
 
 if __name__ == "__main__":
     build_index()

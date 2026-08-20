@@ -1,4 +1,4 @@
-"""events."""
+"""定义推给前端的 SSE 事件格式。"""
 
 import json
 
@@ -10,6 +10,7 @@ EVENT_CHAT_INFO = "chat_info"
 EVENT_DONE = "done"
 EVENT_ERROR = "error"
 EVENT_SAFETY_FLAG = "safety_flag"
+
 
 def make_event(event_type: str, **data) -> dict:
     return {

@@ -1,4 +1,4 @@
-"""config."""
+"""读取环境变量和项目路径等配置。"""
 
 import os
 from pathlib import Path
@@ -11,10 +11,11 @@ ENV_FILE = PROJECT_ROOT / ".env"
 
 load_dotenv(ENV_FILE)
 
-API_KEY = os.getenv("API_KEY", "")
 
-LIGHT_DREAM_API_KEY = (
-    os.getenv("LIGHT_DREAM_API_KEY", "").strip() or API_KEY
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+
+DEEPSEEK_LIGHT_DREAM_API_KEY = (
+    os.getenv("DEEPSEEK_LIGHT_DREAM_API_KEY", "").strip() or DEEPSEEK_API_KEY
 )
 
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
@@ -30,7 +31,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 TOOL_CACHE_DEFAULT_TTL_SECONDS = int(os.getenv("TOOL_CACHE_DEFAULT_TTL_SECONDS", "3600"))
 
 ENABLE_LLM_STATS = os.getenv("ENABLE_LLM_STATS", "false").lower() in ("1", "true", "yes")
-API_BASE = os.getenv("API_BASE", "").strip()
+DEEPSEEK_API_BASE = os.getenv("DEEPSEEK_API_BASE", "").strip()
 LITELLM_PROXY_URL = os.getenv("LITELLM_PROXY_URL", "").strip()
 LITELLM_MASTER_KEY = os.getenv("LITELLM_MASTER_KEY", "sk-litellm-local")
 
@@ -39,8 +40,10 @@ USERS_DIR = BACKEND_DIR / "users"
 SKILLS_DIR = BACKEND_DIR / "skills"
 SAFETY_LOG_PATH = DATA_DIR / "safety_log.jsonl"
 
+
 def _env_bool(name: str, default: str = "true") -> bool:
     return os.getenv(name, default).lower() in ("1", "true", "yes")
+
 
 APPROVAL_TIMEOUT_SECONDS = int(os.getenv("APPROVAL_TIMEOUT_SECONDS", "10"))
 WORKER_COUNT = int(os.getenv("WORKER_COUNT", "5"))
@@ -51,8 +54,13 @@ SEARCH_SAFE_MODE = _env_bool("SEARCH_SAFE_MODE", "false")
 SEARCH_WHITELIST_PATH = DATA_DIR / "search_whitelist.json"
 
 DOCS_AGENT_MODEL = os.getenv("DOCS_AGENT_MODEL", MAIN_MODEL)
-DOCS_AGENT_API_KEY = os.getenv("DOCS_AGENT_API_KEY", "").strip() or API_KEY
-DOCS_AGENT_API_BASE = os.getenv("DOCS_AGENT_API_BASE", "").strip() or API_BASE
+DOCS_AGENT_API_KEY = os.getenv("DOCS_AGENT_API_KEY", "").strip() or DEEPSEEK_API_KEY
+DOCS_AGENT_API_BASE = os.getenv("DOCS_AGENT_API_BASE", "").strip() or DEEPSEEK_API_BASE
+
+HISTORY_AGENT_MODEL = os.getenv("HISTORY_AGENT_MODEL", MAIN_MODEL)
+HISTORY_AGENT_API_KEY = os.getenv("HISTORY_AGENT_API_KEY", "").strip() or DEEPSEEK_API_KEY
+HISTORY_AGENT_API_BASE = os.getenv("HISTORY_AGENT_API_BASE", "").strip() or DEEPSEEK_API_BASE
+HISTORY_AGENT_MAX_TOOL_CALLS = int(os.getenv("HISTORY_AGENT_MAX_TOOL_CALLS", "8"))
 
 DRUG_CLASSI_DB_PATH = DATA_DIR / "drug_classi_db" / "drug_classi.db"
 MEDICAL_DOCS_DIR = DATA_DIR / "medical_docs"
@@ -84,8 +92,13 @@ EVAL_MODE = _env_bool("EVAL_MODE", "false")
 if EVAL_MODE:
     for _scene_cfg in SECURITY_CONFIG.values():
         _scene_cfg["enabled"] = False
+
+HEARTBEAT_ENABLED = _env_bool("HEARTBEAT_ENABLED", "true") and not EVAL_MODE
+HEARTBEAT_MAX_PINGS = int(os.getenv("HEARTBEAT_MAX_PINGS", "1"))
+
 SECURITY_STREAM_WINDOW = int(os.getenv("SECURITY_STREAM_WINDOW", "64"))
 SECURITY_STREAM_OVERLAP = int(os.getenv("SECURITY_STREAM_OVERLAP", "16"))
+
 
 def ensure_dirs() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)

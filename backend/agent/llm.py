@@ -1,4 +1,4 @@
-"""llm."""
+"""封装大模型的流式和非流式调用。"""
 
 import json
 import time
@@ -6,19 +6,13 @@ from typing import AsyncGenerator, Optional
 
 import litellm
 
-from backend.config import MAIN_MODEL, API_KEY, API_BASE
+from backend.config import MAIN_MODEL
 from backend.agent.llm_stats import LLMStats, report, extract_cache_info
 
 LLM_TEXT = "text"
 LLM_TOOL_CALLS = "tool_calls"
 LLM_DONE = "done"
 
-def _apply_credentials(kwargs: dict, api_key: Optional[str]) -> None:
-    key = (api_key if api_key is not None else API_KEY) or None
-    if key:
-        kwargs["api_key"] = key
-    if API_BASE:
-        kwargs["api_base"] = API_BASE
 
 async def stream_chat(
     messages: list[dict],
@@ -30,6 +24,8 @@ async def stream_chat(
     chat_id: str = "",
     username: str = "",
 ) -> AsyncGenerator[dict, None]:
+
+
     kwargs = {
         "model": model,
         "messages": messages,
@@ -40,7 +36,8 @@ async def stream_chat(
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = "auto"
-    _apply_credentials(kwargs, api_key)
+    if api_key:
+        kwargs["api_key"] = api_key
 
     t_start = time.perf_counter()
     t_first_token: Optional[float] = None
@@ -120,16 +117,20 @@ async def stream_chat(
 
     yield {"type": LLM_DONE, "finish_reason": finish_reason, "stats": stats}
 
+
 async def complete(
     messages: list[dict],
     model: str = MAIN_MODEL,
     *,
     api_key: Optional[str] = None,
     tools: Optional[list[dict]] = None,
+    max_tokens: Optional[int] = None,
+    return_stats: bool = False,
     stage: str = "",
     chat_id: str = "",
     username: str = "",
-) -> str:
+) -> "str | tuple[str, LLMStats]":
+
     t_start = time.perf_counter()
 
     completion_kwargs = {
@@ -138,10 +139,13 @@ async def complete(
         "stream": False,
         "extra_body": {"thinking": {"type": "disabled"}},
     }
-    _apply_credentials(completion_kwargs, api_key)
+    if api_key:
+        completion_kwargs["api_key"] = api_key
     if tools:
         completion_kwargs["tools"] = tools
         completion_kwargs["tool_choice"] = "auto"
+    if max_tokens is not None:
+        completion_kwargs["max_tokens"] = max_tokens
 
     response = await litellm.acompletion(**completion_kwargs)
 
@@ -170,4 +174,6 @@ async def complete(
     )
     report(stats)
 
+    if return_stats:
+        return text, stats
     return text

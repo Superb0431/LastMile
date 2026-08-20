@@ -1,6 +1,7 @@
-"""loaders."""
+"""加载工具说明和 Skill。"""
 
 from backend.config import SKILLS_DIR
+
 
 def run_tools_loader(tool_name: str) -> str:
     from backend.tools import registry
@@ -23,6 +24,7 @@ def run_tools_loader(tool_name: str) -> str:
             param_type = param_info.get("type", "")
             lines.append(f"  - {param_name}（{param_type}）：{param_desc}")
     return "\n".join(lines)
+
 
 def run_skill_loader(skill_name: str) -> str:
     skill_md = SKILLS_DIR / skill_name / "SKILL.md"

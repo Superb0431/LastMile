@@ -1,4 +1,4 @@
-"""worker."""
+"""后台 Worker：从 Redis 取任务跑对话，并启动缓存心跳。"""
 
 import asyncio
 from pathlib import Path
@@ -6,11 +6,14 @@ from pathlib import Path
 from backend.config import USERS_DIR, WORKER_COUNT, ensure_dirs
 from backend.memory import db
 from backend.agent.agent_loop import run_agent_turn
+from backend.agent.heartbeat import heartbeat_worker
 from backend.agent.events import EVENT_DONE, EVENT_ERROR, make_event
 from backend.queue import redis_bus
 
+
 def _profile_path(username: str) -> Path:
     return USERS_DIR / username / "profile.md"
+
 
 def _prepare_task(task_id: str, username: str, chat_id: str, *, is_retry: bool) -> None:
     profile_path = _profile_path(username)
@@ -26,6 +29,7 @@ def _prepare_task(task_id: str, username: str, chat_id: str, *, is_retry: bool) 
         redis_bus.save_profile_snapshot(task_id, profile_path.read_text(encoding="utf-8"))
     else:
         redis_bus.save_profile_snapshot(task_id, "")
+
 
 async def _run_one(
     task_id: str,
@@ -49,6 +53,7 @@ async def _run_one(
         redis_bus.push_event(task_id, make_event(EVENT_DONE, chat_id=chat_id))
         redis_bus.set_status(task_id, "error")
 
+
 async def _process_task(entry_id: str, payload: dict, *, is_retry: bool) -> None:
     task_id = payload["task_id"]
     print(f"[Worker] 处理任务 {task_id}{'（认领重试）' if is_retry else ''}")
@@ -61,6 +66,7 @@ async def _process_task(entry_id: str, payload: dict, *, is_retry: bool) -> None
     )
     redis_bus.ack(entry_id)
     print(f"[Worker] 任务 {task_id} 完成并 ACK")
+
 
 async def _worker(name: str) -> None:
     print(f"[Worker {name}] 上线，等待任务…")
@@ -75,11 +81,16 @@ async def _worker(name: str) -> None:
         entry_id, payload = got
         await _process_task(entry_id, payload, is_retry=False)
 
+
 async def main() -> None:
     ensure_dirs()
     db.init_db()
     redis_bus.ensure_group()
-    await asyncio.gather(*[_worker(f"worker-{i + 1}") for i in range(WORKER_COUNT)])
+    await asyncio.gather(
+        *[_worker(f"worker-{i + 1}") for i in range(WORKER_COUNT)],
+        heartbeat_worker(),
+    )
+
 
 if __name__ == "__main__":
     asyncio.run(main())

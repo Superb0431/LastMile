@@ -1,4 +1,4 @@
-"""registry."""
+"""工具注册、参数校验和渐进式加载。"""
 
 from typing import Callable, Literal, Optional
 
@@ -12,6 +12,8 @@ from backend.tools.loaders import run_tools_loader, run_skill_loader
 from backend.tools.drug_analyser import run_drug_interaction
 from backend.tools.drug_danger import run_check_drug_danger
 from backend.tools.read_docs import run_read_docs
+from backend.tools.recall_history import run_recall_history
+
 
 MAX_TOOL_CALLS = 10
 LIGHT_DREAM_MAX_TOOL_CALLS = 8
@@ -22,11 +24,13 @@ LOADER_GATE_MESSAGE = "（工具权限错误：请先调用tools_loader查看工
 
 _loaded_tools_by_chat: dict[str, set[str]] = {}
 
+
 class WebSearchArgs(BaseModel):
     model_config = ConfigDict(strict=False, extra="forbid")
     query: str = Field(min_length=1, description="要搜索的关键词或问题")
     max_results: int = Field(default=1, ge=1, description="最多返回几条结果，默认 1")
     safe: bool = Field(default=False, description="为 true 时仅搜索白名单中的可信来源")
+
 
 class WriteRecordArgs(BaseModel):
     model_config = ConfigDict(strict=False, extra="forbid")
@@ -44,6 +48,7 @@ class WriteRecordArgs(BaseModel):
     symptom_date: str = Field(default="", description="target=interval 时症状日期")
     symptoms: str = Field(default="", description="target=interval 时症状描述")
 
+
 class ReadRecordArgs(BaseModel):
     model_config = ConfigDict(strict=False, extra="forbid")
     target: str = Field(
@@ -56,13 +61,16 @@ class ReadRecordArgs(BaseModel):
         description="仅对 EHR/Interval 生效：只返回最近 N 条记录（profile 不受限）",
     )
 
+
 class ToolsLoaderArgs(BaseModel):
     model_config = ConfigDict(strict=False, extra="forbid")
     tool_name: str = Field(min_length=1, description="想了解的工具名字")
 
+
 class SkillLoaderArgs(BaseModel):
     model_config = ConfigDict(strict=False, extra="forbid")
     skill_name: str = Field(min_length=1, description="想加载的技能名字")
+
 
 class DrugInteractionArgs(BaseModel):
     model_config = ConfigDict(strict=False, extra="forbid")
@@ -71,13 +79,28 @@ class DrugInteractionArgs(BaseModel):
         description="要检查的药物英文通用名列表（至少2种），如 ['Methotrexate', 'Aspirin']",
     )
 
+
 class CheckDrugDangerArgs(BaseModel):
     model_config = ConfigDict(strict=False, extra="forbid")
     drug_name: str = Field(min_length=1, description="要查询的药物名称（中文或英文）")
 
+
 class ReadDocsArgs(BaseModel):
     model_config = ConfigDict(strict=False, extra="forbid")
     query: str = Field(min_length=1, description="检索意图，如：最新指南中如何诊断 Alport 综合征")
+
+
+class RecallHistoryArgs(BaseModel):
+    model_config = ConfigDict(strict=False, extra="forbid")
+    request: str = Field(
+        min_length=1,
+        description="检索意图，如：找到所有关于去医院拍CT没带钱的记录",
+    )
+    recent_dialogue: str = Field(
+        default="",
+        description="当前用户问题及最近两轮对话原文（从上下文摘录，便于提炼关键词）",
+    )
+
 
 _TOOL_SPECS: list[dict] = [
     {
@@ -215,6 +238,24 @@ _TOOL_SPECS: list[dict] = [
         "full_in_prompt": True,
         "cache_policy": "bypass",
     },
+    {
+        "name": "recall_history",
+        "description": (
+            "跨会话检索用户曾经说过的聊天原文。"
+            "当用户问「还记得」「之前说过」「上次提到」等，"
+            "且 Profile / Summary / Timeline 不足以还原具体对话细节时使用；"
+            "传入检索意图，并尽量附上当前问题与近两轮对话原文。"
+        ),
+        "args_model": RecallHistoryArgs,
+        "parameters": RecallHistoryArgs.model_json_schema(),
+        "handler": run_recall_history,
+        "requires_approval": False,
+        "needs_username": True,
+        "main_agent": True,
+        "light_dream": False,
+        "full_in_prompt": True,
+        "cache_policy": "bypass",
+    },
 ]
 
 TOOLS: list[dict] = [
@@ -232,9 +273,11 @@ TOOLS: list[dict] = [
 TOOL_HANDLERS: dict[str, Callable] = {spec["name"]: spec["handler"] for spec in _TOOL_SPECS}
 _SPEC_BY_NAME: dict[str, dict] = {spec["name"]: spec for spec in _TOOL_SPECS}
 
+
 def _specs_for_mode(mode: AgentMode) -> list[dict]:
     key = "main_agent" if mode == "main" else "light_dream"
     return [spec for spec in _TOOL_SPECS if spec.get(key)]
+
 
 def _build_tool_list(specs: list[dict], *, full_parameters: bool) -> list[dict]:
     tools: list[dict] = []
@@ -255,12 +298,15 @@ def _build_tool_list(specs: list[dict], *, full_parameters: bool) -> list[dict]:
         )
     return tools
 
+
 def get_initial_tools(mode: AgentMode = "main") -> list[dict]:
     return _build_tool_list(_specs_for_mode(mode), full_parameters=False)
+
 
 def get_light_dream_tools() -> list[dict]:
     specs = [spec for spec in _TOOL_SPECS if spec.get("light_dream")]
     return _build_tool_list(specs, full_parameters=True)
+
 
 def get_tool_definition(tool_name: str) -> Optional[dict]:
     for tool in TOOLS:
@@ -268,17 +314,21 @@ def get_tool_definition(tool_name: str) -> Optional[dict]:
             return tool
     return None
 
+
 def requires_approval(tool_name: str) -> bool:
     spec = _SPEC_BY_NAME.get(tool_name)
     return bool(spec and spec.get("requires_approval"))
+
 
 def get_cache_policy(tool_name: str) -> str:
     spec = _SPEC_BY_NAME.get(tool_name)
     return (spec or {}).get("cache_policy", "bypass")
 
+
 def get_cache_ttl(tool_name: str) -> Optional[int]:
     spec = _SPEC_BY_NAME.get(tool_name)
     return (spec or {}).get("cache_ttl_seconds")
+
 
 def _scan_loaded_tools_from_db(chat_id: str, username: str) -> set[str]:
     messages = db.get_messages(chat_id, username)
@@ -301,10 +351,12 @@ def _scan_loaded_tools_from_db(chat_id: str, username: str) -> set[str]:
             loaded.add(target)
     return loaded
 
+
 def hydrate_loaded_tools(chat_id: str, username: str) -> None:
     if not chat_id or chat_id in _loaded_tools_by_chat:
         return
     _loaded_tools_by_chat[chat_id] = _scan_loaded_tools_from_db(chat_id, username)
+
 
 def mark_tool_loaded(chat_id: str, tool_name: str) -> None:
     target = (tool_name or "").strip()
@@ -342,6 +394,7 @@ def if_valid(
 
     return True, ""
 
+
 def check_arguments(tool_name: str, arguments: dict) -> tuple[bool, str]:
     spec = _SPEC_BY_NAME.get(tool_name)
     if spec is None:
@@ -357,6 +410,7 @@ def check_arguments(tool_name: str, arguments: dict) -> tuple[bool, str]:
             loc = ".".join(str(part) for part in err["loc"]) or "(根)"
             problems.append(f"参数「{loc}」不合法：{err['msg']}")
         return False, "；".join(problems)
+
 
 def execute_tool(tool_name: str, arguments: dict, username: str) -> str:
     handler = TOOL_HANDLERS[tool_name]
